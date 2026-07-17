@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorshipFreely — Pad Synth</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0b0b0e;
+      color: #d4d4dc;
+      font-family: -apple-system, 'Helvetica Neue', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      user-select: none;
+    }
+    .app {
+      width: 780px;
+      max-width: 96vw;
+      padding: 2rem 1rem;
+    }
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 400;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #6b6b78;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    .midi-section {
+      background: #131318;
+      border-radius: 12px;
+      padding: 0.9rem 1.25rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .midi-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: #6b6b78;
+    }
+    .midi-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #3a3a44;
+      transition: background 0.15s;
+    }
+    .midi-dot.connected { background: #4ade80; box-shadow: 0 0 8px #4ade8080; }
+    .midi-dot.playing { background: #a78bfa; box-shadow: 0 0 12px #a78bfa80; }
+    button {
+      background: #1e1e28;
+      border: none;
+      color: #b0b0bc;
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    button:hover { background: #2a2a36; color: #fff; }
+    button.primary { background: #6d28d9; color: #fff; }
+    button.primary:hover { background: #7c3aed; }
+    select {
+      background: #1e1e28;
+      color: #d4d4dc;
+      border: none;
+      padding: 0.45rem 0.7rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      flex: 1;
+      min-width: 120px;
+    }
+    .controls {
+      background: #131318;
+      border-radius: 12px;
+      padding: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+    }
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .control-row label {
+      width: 60px;
+      font-size: 0.75rem;
+      color: #6b6b78;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+    .control-row input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      background: #22222e;
+      border-radius: 2px;
+      outline: none;
+    }
+    .control-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #7c3aed;
+      cursor: pointer;
+    }
+    .control-value {
+      width: 32px;
+      text-align: right;
+      font-size: 0.75rem;
+      font-variant-numeric: tabular-nums;
+      color: #a78bfa;
+    }
+    .keyboard-vis {
+      margin-top: 1rem;
+      display: flex;
+      height: 72px;
+      position: relative;
+    }
+    .white-key {
+      flex: 1;
+      position: relative;
+      background: #16161f;
+      border-right: 1px solid #0b0b0e;
+      transition: background 0.06s;
+      cursor: pointer;
+    }
+    .white-key.active { background: #3b1f7a; }
+    .white-key:last-child { border-right: none; }
+    .white-key .note-label {
+      position: absolute;
+      bottom: 4px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 0.5rem;
+      color: #313140;
+      pointer-events: none;
+    }
+    .black-key {
+      position: absolute;
+      top: 0;
+      left: calc(100% - 8px);
+      width: 16px;
+      height: 44px;
+      background: #22222e;
+      border-radius: 0 0 4px 4px;
+      z-index: 3;
+      transition: background 0.06s;
+    }
+    .black-key.active { background: #5b21b6; }
+    .sustain-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.75rem;
+      color: #6b6b78;
+      margin-left: auto;
+    }
+    .sustain-indicator.on { color: #a78bfa; }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.6rem;
+      font-size: 0.72rem;
+      color: #3a3a48;
+    }
+    .voice-count { font-variant-numeric: tabular-nums; }
+    .error { color: #f87171; font-size: 0.78rem; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>WorshipFreely</h1>
+
+    <div class="midi-section">
+      <div class="midi-status">
+        <span class="midi-dot" id="midiDot"></span>
+        <span id="midiLabel">No MIDI device</span>
+      </div>
+      <select id="midiSelect" disabled></select>
+      <button id="midiBtn" class="primary">Connect</button>
+      <span class="sustain-indicator" id="sustainInd">Sustain</span>
+    </div>
+
+    <div class="controls">
+      <div class="control-row">
+        <label>Volume</label>
+        <input type="range" id="volume" min="-40" max="0" value="-10" step="1">
+        <span class="control-value" id="volumeVal">-10</span>
+      </div>
+      <div class="control-row">
+        <label>Attack</label>
+        <input type="range" id="attack" min="0.01" max="2" value="0.4" step="0.01">
+        <span class="control-value" id="attackVal">0.40</span>
+      </div>
+      <div class="control-row">
+        <label>Release</label>
+        <input type="range" id="release" min="0.5" max="8" value="3.5" step="0.1">
+        <span class="control-value" id="releaseVal">3.5</span>
+      </div>
+      <div class="control-row">
+        <label>Detune</label>
+        <input type="range" id="detune" min="0" max="40" value="12" step="1">
+        <span class="control-value" id="detuneVal">12</span>
+      </div>
+      <div class="control-row">
+        <label>Filter</label>
+        <input type="range" id="filterFreq" min="200" max="8000" value="3500" step="10">
+        <span class="control-value" id="filterFreqVal">3500</span>
+      </div>
+      <div class="control-row">
+        <label>Reverb</label>
+        <input type="range" id="reverbMix" min="0" max="1" value="0.50" step="0.01">
+        <span class="control-value" id="reverbMixVal">50</span>
+      </div>
+      <div class="control-row">
+        <label>Delay</label>
+        <input type="range" id="delayMix" min="0" max="1" value="0.22" step="0.01">
+        <span class="control-value" id="delayMixVal">22</span>
+      </div>
+    </div>
+
+    <div class="keyboard-vis" id="keyboardVis"></div>
+
+    <div class="status-bar">
+      <span>Plug in MIDI keyboard, then click Connect</span>
+      <span class="voice-count" id="voiceCount">0 voices</span>
+    </div>
+  </div>
+
+  <script>
+    // ── Synth engine ──────────────────────────────────────────────────────────
+
+    let synth, filter, reverb, delay;
+
+    async function initSynth() {
+      await Tone.start();
+
+      // Warm pad: sawtooth with chorused detune
+      synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.4, decay: 0.6, sustain: 0.7, release: 3.5 },
+        volume: -10,
+      });
+
+      // Signal chain: synth → filter → reverb → delay → output
+      filter = new Tone.Filter(3500, 'lowpass');
+      reverb = new Tone.Reverb({ decay: 4, preDelay: 0.08, wet: 0.5 });
+      delay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.3, wet: 0.22 });
+
+      synth.connect(filter);
+      filter.connect(reverb);
+      reverb.connect(delay);
+      delay.toDestination();
+
+      // Also route some dry signal directly (parallel dry path)
+      // Reverb at 50% wet already gives a good blend; the dry passes through
+      // So we skip the parallel path to keep it simple.
+    }
+
+    // ── MIDI ──────────────────────────────────────────────────────────────────
+
+    const midiDot = document.getElementById('midiDot');
+    const midiLabel = document.getElementById('midiLabel');
+    const midiSelect = document.getElementById('midiSelect');
+    const midiBtn = document.getElementById('midiBtn');
+    const sustainInd = document.getElementById('sustainInd');
+    const voiceCount = document.getElementById('voiceCount');
+
+    let midiAccess = null;
+    let selectedInput = null;
+
+    // Note tracking
+    const activeNotes = new Map();   // midiNote -> { time, velocity }
+    const sustainedNotes = new Set(); // midiNotes held by sustain pedal
+    let sustainOn = false;
+
+    function noteOn(note, velocity) {
+      const now = Tone.now();
+      activeNotes.set(note, { time: now, velocity: velocity / 127 });
+      midiDot.className = 'midi-dot connected playing';
+      updateKeyVisual(note, true);
+      synth.triggerAttack(Tone.Frequency(note, 'midi').toFrequency(), now, velocity / 127);
+      updateVoiceCount();
+    }
+
+    function noteOff(note) {
+      activeNotes.delete(note);
+      if (sustainOn) {
+        // Hold the note via sustain pedal
+        sustainedNotes.add(note);
+      } else {
+        synth.triggerRelease(Tone.Frequency(note, 'midi').toFrequency(), Tone.now());
+        updateKeyVisual(note, false);
+      }
+      if (activeNotes.size === 0 && !sustainOn) {
+        midiDot.className = 'midi-dot connected';
+      }
+      updateVoiceCount();
+    }
+
+    function releaseSustained() {
+      const now = Tone.now();
+      for (const note of sustainedNotes) {
+        synth.triggerRelease(Tone.Frequency(note, 'midi').toFrequency(), now);
+        updateKeyVisual(note, false);
+      }
+      sustainedNotes.clear();
+      if (activeNotes.size === 0) {
+        midiDot.className = 'midi-dot connected';
+      }
+      updateVoiceCount();
+    }
+
+    function onMIDIMessage(msg) {
+      const [status, note, value] = msg.data;
+      const cmd = status & 0xf0;
+
+      if (cmd === 0x90 && value > 0) {
+        noteOn(note, value);
+      } else if (cmd === 0x80 || (cmd === 0x90 && value === 0)) {
+        noteOff(note);
+      } else if (cmd === 0xb0) {
+        const cc = msg.data[1];
+        const val = msg.data[2];
+        if (cc === 64) {
+          // Sustain pedal
+          sustainOn = val >= 64;
+          sustainInd.classList.toggle('on', sustainOn);
+          if (!sustainOn) releaseSustained();
+        } else if (cc === 1) {
+          // Modulation wheel → filter cutoff sweep
+          const freq = 200 + (val / 127) * 7800;
+          filter.frequency.rampTo(freq, 0.05);
+          document.getElementById('filterFreq').value = freq;
+          document.getElementById('filterFreqVal').textContent = Math.round(freq);
+        }
+      } else if (cmd === 0xe0) {
+        // Pitch bend (14-bit)
+        const bend = ((value << 7) | note) - 8192;
+        // Ratio: ±2 semitones at max bend
+        // Not wired by default, but easy to add
+      }
+    }
+
+    async function connectMIDI(deviceId) {
+      if (!midiAccess) return;
+      if (selectedInput) { selectedInput.onmidimessage = null; }
+      selectedInput = midiAccess.inputs.get(deviceId);
+      if (selectedInput) {
+        selectedInput.onmidimessage = onMIDIMessage;
+        midiDot.className = 'midi-dot connected';
+        midiLabel.textContent = selectedInput.name;
+        midiBtn.textContent = 'Disconnect';
+        midiBtn.classList.remove('primary');
+      }
+    }
+
+    function disconnectMIDI() {
+      if (selectedInput) {
+        selectedInput.onmidimessage = null;
+        selectedInput = null;
+      }
+      // Release all held notes
+      synth.releaseAll(Tone.now());
+      activeNotes.clear();
+      sustainedNotes.clear();
+      sustainOn = false;
+      sustainInd.classList.remove('on');
+      midiDot.className = 'midi-dot';
+      midiLabel.textContent = 'No MIDI device';
+      midiBtn.textContent = 'Connect';
+      midiBtn.classList.add('primary');
+      clearKeyboard();
+      updateVoiceCount();
+    }
+
+    async function initMIDI() {
+      // Chrome requires a user gesture (this click) before MIDI access works
+      try {
+        midiAccess = await navigator.requestMIDIAccess();
+      } catch (err) {
+        midiLabel.textContent = 'MIDI access denied';
+        midiLabel.style.color = '#f87171';
+        return false;
+      }
+
+      midiAccess.onstatechange = () => {
+        if (selectedInput && !midiAccess.inputs.get(selectedInput.id)) {
+          disconnectMIDI();
+        }
+        updateMIDIList();
+      };
+
+      updateMIDIList();
+      return true;
+    }
+
+    function updateMIDIList() {
+      const inputs = midiAccess ? [...midiAccess.inputs.values()] : [];
+      if (inputs.length > 0) {
+        midiSelect.disabled = false;
+        const currentVal = midiSelect.value;
+        midiSelect.innerHTML = inputs
+          .map(d => `<option value="${d.id}" ${d.id === currentVal ? 'selected' : ''}>${d.name}</option>`)
+          .join('');
+        if (!currentVal || !midiSelect.value) midiSelect.value = inputs[0].id;
+        // If we're in "click to connect" state, show the dropdown as ready
+        if (!selectedInput && midiLabel.textContent !== 'Disconnected') {
+          midiLabel.textContent = 'Select a device and Connect';
+          midiDot.className = 'midi-dot';
+        }
+      } else {
+        midiSelect.disabled = true;
+        midiSelect.innerHTML = '<option>— none found —</option>';
+        if (!selectedInput) {
+          midiLabel.textContent = 'No MIDI device';
+          midiDot.className = 'midi-dot';
+        }
+      }
+    }
+
+    // ── Keyboard visual ────────────────────────────────────────────────────────
+
+    const KEY_LAYOUT = [
+      // { whiteName, hasBlackAbove, blackName }
+      // One entry per white key in the octave
+      { white: 'C',  black: true  }, // C → C#
+      { white: 'D',  black: true  }, // D → D#
+      { white: 'E',  black: false },
+      { white: 'F',  black: true  }, // F → F#
+      { white: 'G',  black: true  }, // G → G#
+      { white: 'A',  black: true  }, // A → A#
+      { white: 'B',  black: false },
+    ];
+    const WHITE_MIDI_OFFSETS = [0, 2, 4, 5, 7, 9, 11];
+    const START_OCTAVE = 3;
+    const END_OCTAVE = 7;
+
+    function buildKeyboard() {
+      const c = document.getElementById('keyboardVis');
+      c.innerHTML = '';
+
+      for (let oct = START_OCTAVE; oct <= END_OCTAVE; oct++) {
+        KEY_LAYOUT.forEach(({ white, black }, idx) => {
+          const midiNum = (oct + 1) * 12 + WHITE_MIDI_OFFSETS[idx];
+
+          const wk = document.createElement('div');
+          wk.className = 'white-key';
+          wk.dataset.midi = midiNum;
+
+          const label = document.createElement('span');
+          label.className = 'note-label';
+          label.textContent = white;
+          wk.appendChild(label);
+
+          if (black) {
+            const bk = document.createElement('div');
+            bk.className = 'black-key';
+            bk.dataset.midi = midiNum + 1;
+            wk.appendChild(bk);
+          }
+
+          c.appendChild(wk);
+        });
+      }
+    }
+
+    function updateKeyVisual(midiNum, active) {
+      document.querySelectorAll(`[data-midi="${midiNum}"]`).forEach(el => {
+        el.classList.toggle('active', active);
+      });
+    }
+
+    function clearKeyboard() {
+      document.querySelectorAll('.active').forEach(el => el.classList.remove('active'));
+    }
+
+    function updateVoiceCount() {
+      const count = activeNotes.size + sustainedNotes.size;
+      voiceCount.textContent = `${count} voice${count !== 1 ? 's' : ''}`;
+    }
+
+    // ── Controls ──────────────────────────────────────────────────────────────
+
+    function bindSlider(id, apply, display) {
+      const el = document.getElementById(id);
+      const val = document.getElementById(id + 'Val');
+      const update = () => {
+        const v = parseFloat(el.value);
+        apply(v);
+        val.textContent = display ? display(v) : v;
+      };
+      el.addEventListener('input', update);
+      update();
+    }
+
+    bindSlider('volume',
+      v => synth.volume.value = v,
+      v => Math.round(v));
+    bindSlider('attack',
+      v => synth.set({ envelope: { attack: v } }),
+      v => v.toFixed(2));
+    bindSlider('release',
+      v => synth.set({ envelope: { release: v } }),
+      v => v.toFixed(1));
+    bindSlider('detune',
+      v => synth.set({ detune: v }),
+      v => Math.round(v));
+    bindSlider('filterFreq',
+      v => filter.frequency.value = v,
+      v => Math.round(v));
+    bindSlider('reverbMix',
+      v => reverb.wet.value = v,
+      v => Math.round(v * 100));
+    bindSlider('delayMix',
+      v => delay.wet.value = v,
+      v => Math.round(v * 100));
+
+    // ── Boot ───────────────────────────────────────────────────────────────────
+
+    initSynth().then(() => {
+      // Trigger initial control states now that synth/filter/etc exist
+      ['volume', 'attack', 'release', 'detune', 'filterFreq', 'reverbMix', 'delayMix']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          el.dispatchEvent(new Event('input'));
+        });
+    });
+
+    buildKeyboard();
+
+    // Don't call initMIDI() on page load — Chrome needs a user gesture first.
+    // The Connect button handles it.
+
+    midiBtn.addEventListener('click', async () => {
+      if (selectedInput) {
+        disconnectMIDI();
+        return;
+      }
+      // First click: request MIDI access (needs user gesture)
+      if (!midiAccess) {
+        midiBtn.textContent = 'Requesting MIDI...';
+        midiBtn.disabled = true;
+        const ok = await initMIDI();
+        midiBtn.disabled = false;
+        if (!ok) {
+          midiBtn.textContent = 'Retry';
+          return;
+        }
+        if (midiSelect.options.length > 0 && midiSelect.value) {
+          connectMIDI(midiSelect.value);
+        }
+        return;
+      }
+      // Already have access, just connect the selected device
+      connectMIDI(midiSelect.value);
+    });
+
+    midiSelect.addEventListener('change', () => {
+      // If already connected to a device, switch to the newly selected one
+      if (selectedInput && midiAccess) {
+        connectMIDI(midiSelect.value);
+      }
+    });
+
+    if (!navigator.requestMIDIAccess) {
+      midiLabel.textContent = 'MIDI not supported (use Chrome)';
+    }
+  </script>
+</body>
+</html>
