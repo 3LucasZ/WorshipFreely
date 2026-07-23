@@ -235,7 +235,7 @@
     <div class="keyboard-vis" id="keyboardVis"></div>
 
     <div class="status-bar">
-      <span>Plug in MIDI keyboard, then click Connect</span>
+      <span id="statusMsg">Plug in MIDI keyboard, then click Connect</span>
       <span class="voice-count" id="voiceCount">0 voices</span>
     </div>
   </div>
@@ -278,6 +278,7 @@
     const midiBtn = document.getElementById('midiBtn');
     const sustainInd = document.getElementById('sustainInd');
     const voiceCount = document.getElementById('voiceCount');
+    const statusMsg = document.getElementById('statusMsg');
 
     let midiAccess = null;
     let selectedInput = null;
@@ -388,24 +389,46 @@
     }
 
     async function initMIDI() {
-      // Chrome requires a user gesture (this click) before MIDI access works
       try {
         midiAccess = await navigator.requestMIDIAccess();
+        console.log('MIDI access granted');
       } catch (err) {
-        midiLabel.textContent = 'MIDI access denied';
+        console.error('MIDI access error:', err);
+        midiLabel.textContent = `MIDI permission blocked`;
         midiLabel.style.color = '#f87171';
+        statusMsg.textContent = 'Click the lock/tune icon in the URL bar → Site Settings → reset MIDI-SysEx permission';
         return false;
       }
 
-      midiAccess.onstatechange = () => {
-        if (selectedInput && !midiAccess.inputs.get(selectedInput.id)) {
-          disconnectMIDI();
+      logMIDIDevices();
+
+      midiAccess.onstatechange = (e) => {
+        console.log('MIDI state change:', e.port.name, e.port.state, e.port.connection);
+        if (e.port.type === 'input') {
+          if (e.port.state === 'connected') {
+            // Device plugged in — auto-connect if we aren't already connected
+            updateMIDIList();
+            if (!selectedInput) {
+              connectMIDI(e.port.id);
+            }
+          } else if (e.port.state === 'disconnected') {
+            if (selectedInput && e.port.id === selectedInput.id) {
+              disconnectMIDI();
+            }
+            updateMIDIList();
+          }
         }
-        updateMIDIList();
       };
 
       updateMIDIList();
       return true;
+    }
+
+    function logMIDIDevices() {
+      if (!midiAccess) return;
+      const inputs = [...midiAccess.inputs.values()];
+      console.log(`MIDI inputs found: ${inputs.length}`);
+      inputs.forEach(d => console.log(`  - ${d.name} (${d.id})`));
     }
 
     function updateMIDIList() {
@@ -417,16 +440,20 @@
           .map(d => `<option value="${d.id}" ${d.id === currentVal ? 'selected' : ''}>${d.name}</option>`)
           .join('');
         if (!currentVal || !midiSelect.value) midiSelect.value = inputs[0].id;
-        // If we're in "click to connect" state, show the dropdown as ready
-        if (!selectedInput && midiLabel.textContent !== 'Disconnected') {
-          midiLabel.textContent = 'Select a device and Connect';
+        if (selectedInput) {
+          midiLabel.textContent = selectedInput.name;
+          statusMsg.textContent = 'Playing — adjust sliders to shape the sound';
+        } else {
+          midiLabel.textContent = `Select device, then Connect`;
+          statusMsg.textContent = `${inputs.length} device${inputs.length > 1 ? 's' : ''} found — select one and Connect`;
           midiDot.className = 'midi-dot';
         }
       } else {
         midiSelect.disabled = true;
-        midiSelect.innerHTML = '<option>— none found —</option>';
+        midiSelect.innerHTML = '<option>— no devices —</option>';
         if (!selectedInput) {
-          midiLabel.textContent = 'No MIDI device';
+          midiLabel.textContent = 'No MIDI device found';
+          statusMsg.textContent = 'Check USB connection — open DevTools console (Cmd+Option+J) for details';
           midiDot.className = 'midi-dot';
         }
       }
@@ -493,91 +520,124 @@
       voiceCount.textContent = `${count} voice${count !== 1 ? 's' : ''}`;
     }
 
-    // ── Controls ──────────────────────────────────────────────────────────────
+    // ── Sliders (UI only until synth is ready) ────────────────────────────────
 
-    function bindSlider(id, apply, display) {
+    // Store raw slider values so we can apply them once synth is created
+    const pendingValues = {};
+
+    function setupSlider(id, display) {
       const el = document.getElementById(id);
       const val = document.getElementById(id + 'Val');
       const update = () => {
         const v = parseFloat(el.value);
-        apply(v);
+        pendingValues[id] = v;
         val.textContent = display ? display(v) : v;
       };
       el.addEventListener('input', update);
-      update();
+      update(); // show initial value immediately
     }
 
-    bindSlider('volume',
-      v => synth.volume.value = v,
-      v => Math.round(v));
-    bindSlider('attack',
-      v => synth.set({ envelope: { attack: v } }),
-      v => v.toFixed(2));
-    bindSlider('release',
-      v => synth.set({ envelope: { release: v } }),
-      v => v.toFixed(1));
-    bindSlider('detune',
-      v => synth.set({ detune: v }),
-      v => Math.round(v));
-    bindSlider('filterFreq',
-      v => filter.frequency.value = v,
-      v => Math.round(v));
-    bindSlider('reverbMix',
-      v => reverb.wet.value = v,
-      v => Math.round(v * 100));
-    bindSlider('delayMix',
-      v => delay.wet.value = v,
-      v => Math.round(v * 100));
+    setupSlider('volume',     v => Math.round(v));
+    setupSlider('attack',     v => v.toFixed(2));
+    setupSlider('release',    v => v.toFixed(1));
+    setupSlider('detune',     v => Math.round(v));
+    setupSlider('filterFreq', v => Math.round(v));
+    setupSlider('reverbMix',  v => Math.round(v * 100));
+    setupSlider('delayMix',   v => Math.round(v * 100));
+
+    // Apply stored slider values after synth has been initialized
+    function applySliderValues() {
+      synth.volume.value  = pendingValues.volume;
+      synth.set({ envelope: { attack: pendingValues.attack, release: pendingValues.release } });
+      synth.set({ detune: pendingValues.detune });
+      filter.frequency.value  = pendingValues.filterFreq;
+      reverb.wet.value = pendingValues.reverbMix;
+      delay.wet.value  = pendingValues.delayMix;
+    }
+
+    // Re-bind sliders to live synth params once the engine exists
+    function bindSlidersLive() {
+      const live = {
+        volume:     v => { synth.volume.value = v; pendingValues.volume = v; },
+        attack:     v => { synth.set({ envelope: { attack: v } }); pendingValues.attack = v; },
+        release:    v => { synth.set({ envelope: { release: v } }); pendingValues.release = v; },
+        detune:     v => { synth.set({ detune: v }); pendingValues.detune = v; },
+        filterFreq: v => { filter.frequency.value = v; pendingValues.filterFreq = v; },
+        reverbMix:  v => { reverb.wet.value = v; pendingValues.reverbMix = v; },
+        delayMix:   v => { delay.wet.value = v; pendingValues.delayMix = v; },
+      };
+      Object.entries(live).forEach(([id, apply]) => {
+        const el = document.getElementById(id);
+        // Remove old listeners and attach one that calls apply
+        // (cheapest: replace with new clone — simpler to just add a listener
+        //  that also updates pendingValues, since the old setupSlider listener
+        //  just updates the display + pending which is harmless)
+        el.addEventListener('input', () => apply(parseFloat(el.value)));
+      });
+    }
 
     // ── Boot ───────────────────────────────────────────────────────────────────
 
-    initSynth().then(() => {
-      // Trigger initial control states now that synth/filter/etc exist
-      ['volume', 'attack', 'release', 'detune', 'filterFreq', 'reverbMix', 'delayMix']
-        .forEach(id => {
-          const el = document.getElementById(id);
-          el.dispatchEvent(new Event('input'));
-        });
-    });
+    let engineReady = false;
 
     buildKeyboard();
 
-    // Don't call initMIDI() on page load — Chrome needs a user gesture first.
-    // The Connect button handles it.
-
     midiBtn.addEventListener('click', async () => {
+      // ── Disconnect path ──────────────────────────────────────────────
       if (selectedInput) {
         disconnectMIDI();
+        midiBtn.textContent = midiAccess ? 'Reconnect' : 'Connect';
+        midiBtn.classList.add('primary');
         return;
       }
-      // First click: request MIDI access (needs user gesture)
-      if (!midiAccess) {
-        midiBtn.textContent = 'Requesting MIDI...';
+
+      // ── First click: init engine + MIDI access ───────────────────────
+      if (!engineReady) {
+        midiBtn.textContent = 'Starting…';
         midiBtn.disabled = true;
-        const ok = await initMIDI();
+        await initSynth();
+        engineReady = true;
+        applySliderValues();
+        bindSlidersLive();
+      }
+
+      if (!midiAccess) {
+        midiBtn.textContent = 'Requesting MIDI…';
+        midiBtn.disabled = true;
+        await initMIDI();
         midiBtn.disabled = false;
-        if (!ok) {
+        if (!midiAccess) {
           midiBtn.textContent = 'Retry';
           return;
         }
-        if (midiSelect.options.length > 0 && midiSelect.value) {
-          connectMIDI(midiSelect.value);
-        }
+      }
+
+      // ── Refresh: re-enumerate MIDI devices ───────────────────────────
+      const inputs = [...midiAccess.inputs.values()];
+      if (inputs.length === 0) {
+        // No devices — guide user
+        midiLabel.textContent = 'Plug in keyboard, then click Refresh';
+        midiBtn.textContent = 'Refresh';
         return;
       }
-      // Already have access, just connect the selected device
-      connectMIDI(midiSelect.value);
+
+      // ── Connect to selected device ───────────────────────────────────
+      const deviceId = midiSelect.value || inputs[0].id;
+      connectMIDI(deviceId);
     });
 
     midiSelect.addEventListener('change', () => {
-      // If already connected to a device, switch to the newly selected one
       if (selectedInput && midiAccess) {
         connectMIDI(midiSelect.value);
       }
     });
 
     if (!navigator.requestMIDIAccess) {
-      midiLabel.textContent = 'MIDI not supported (use Chrome)';
+      midiLabel.textContent = 'MIDI not supported (use Chrome/Arc)';
+      statusMsg.textContent = 'Arc or Chrome required with HTTPS or localhost';
+    } else if (!window.isSecureContext) {
+      midiLabel.textContent = 'Secure context required';
+      statusMsg.textContent = 'Open via localhost (http://localhost:8080) not file://';
     }
   </script>
 </body>
