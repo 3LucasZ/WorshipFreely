@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WAV → Sheet Music — Proof of Concept</title>
+  <script src="https://cdn.jsdelivr.net/npm/abcjs@6.4.4/dist/abcjs-basic-min.js">
+  </script>
+  <style>
+    :root {
+      --bg: #0b0b0e;
+      --surface: #131318;
+      --surface2: #1e1e28;
+      --border: #2a2a38;
+      --text: #d4d4dc;
+      --text-dim: #6b6b78;
+      --text-faint: #3a3a48;
+      --accent: #6d28d9;
+      --accent-hov: #7c3aed;
+      --green: #4ade80;
+      --slider-fg: var(--accent);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, system-ui, sans-serif;
+      min-height: 100vh;
+      user-select: none;
+    }
+    .app {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem;
+    }
+
+    h1 {
+      font-size: 1rem;
+      font-weight: 400;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .subtitle {
+      font-size: 0.75rem;
+      color: var(--text-faint);
+      margin-top: 0.2rem;
+    }
+
+    /* File drop */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin: 1rem 0;
+    }
+    .drop-zone:hover { border-color: var(--text-faint); }
+    .drop-zone.has-data { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    .drop-zone .icon { font-size: 2rem; color: var(--text-faint); margin-bottom: 0.3rem; }
+    .drop-zone .title { font-size: 0.85rem; color: var(--text-dim); }
+    .drop-zone .hint { font-size: 0.72rem; color: var(--text-faint); margin-top: 0.2rem; }
+    .drop-zone .fname { font-size: 0.8rem; color: var(--accent); margin-top: 0.3rem; }
+
+    /* Info bar */
+    .info-bar {
+      display: flex;
+      gap: 1.2rem;
+      flex-wrap: wrap;
+      padding: 0.7rem 0;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    .info-bar .val { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+    .info-bar .label { color: var(--text-faint); }
+
+    /* Sheet music container */
+    #paper {
+      min-height: 120px;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      padding: 0.5rem 0;
+    }
+    #paper svg { display: block; margin: 0 auto; }
+
+    /* Playback controls */
+    #audio {
+      margin-top: 1rem;
+      padding: 0.5rem 0;
+    }
+    #audio .abcjs-midi-selection,
+    #audio .abcjs-midi-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    #audio button {
+      background: var(--surface2);
+      border: none;
+      color: var(--text-dim);
+      padding: 0.4rem 0.9rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    #audio button:hover { background: var(--accent); color: #fff; }
+    #audio input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+    }
+    #audio input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+    #audio progress {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 200px;
+      height: 4px;
+      border-radius: 2px;
+    }
+    #audio progress::-webkit-progress-bar { background: var(--border); border-radius: 2px; }
+    #audio progress::-webkit-progress-value { background: var(--accent); border-radius: 2px; }
+
+    /* ABC raw text (debug) */
+    .abc-toggle {
+      font-size: 0.7rem;
+      color: var(--text-faint);
+      cursor: pointer;
+      padding: 0.4rem 0;
+      display: inline-block;
+    }
+    .abc-toggle:hover { color: var(--text-dim); }
+    #abcRaw {
+      display: none;
+      background: var(--surface);
+      border-radius: 6px;
+      padding: 0.8rem;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      white-space: pre-wrap;
+      margin-bottom: 0.5rem;
+      max-height: 200px;
+      overflow: auto;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+    }
+    .empty-state .icon { font-size: 2.5rem; color: var(--text-faint); margin-bottom: 0.5rem; }
+    .empty-state h2 { font-size: 1.1rem; font-weight: 400; color: var(--text-dim); margin-bottom: 0.3rem; }
+    .empty-state p { font-size: 0.8rem; color: var(--text-faint); }
+
+    /* Loading state */
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-faint);
+      font-size: 0.85rem;
+    }
+    .loading .spinner {
+      display: inline-block;
+      width: 24px; height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 0.5rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Status message */
+    #status {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-faint);
+      padding: 0.4rem 0;
+      min-height: 1.5rem;
+    }
+    #status.error { color: #f87171; }
+    #status.ok { color: var(--green); }
+
+    @media (max-width: 600px) {
+      .app { padding: 1rem 0.5rem; }
+      #paper { overflow-x: auto; }
+      .info-bar { gap: 0.7rem; font-size: 0.72rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>WAV → Sheet Music</h1>
+    <div class="subtitle">Proof of Concept — transcribe audio to notation</div>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".json" hidden>
+      <div class="icon">&#9835;</div>
+      <div class="title">Drop a notes.json here, or click to browse</div>
+      <div class="hint">From: python transcribe.py piano.wav &rarr; piano_notes.json</div>
+      <div class="fname" id="fileName"></div>
+    </div>
+
+    <!-- Info bar -->
+    <div class="info-bar" id="infoBar" style="display:none">
+      <span><span class="label">Notes:</span> <span class="val" id="infoNotes">0</span></span>
+      <span><span class="label">Tempo:</span> <span class="val" id="infoTempo">0</span> BPM</span>
+      <span><span class="label">Duration:</span> <span class="val" id="infoDuration">0</span>s</span>
+      <span><span class="label">Key:</span> <span class="val" id="infoKey">C</span></span>
+      <span><span class="label">Time:</span> <span class="val" id="infoTime">4/4</span></span>
+      <span><span class="label">Measures:</span> <span class="val" id="infoMeasures">0</span></span>
+    </div>
+
+    <!-- Status -->
+    <div id="status">Load a notes.json file to generate sheet music</div>
+
+    <!-- Sheet music -->
+    <div id="paper" class="empty-state">
+      <div class="empty-state">
+        <div class="icon">&#9835;</div>
+        <h2>No data loaded</h2>
+        <p>Run transcribe.py on a WAV file, then load the output JSON here.</p>
+      </div>
+    </div>
+
+    <!-- Raw ABC toggle -->
+    <span class="abc-toggle" id="abcToggle" style="display:none">&#9660; Show raw ABC</span>
+    <pre id="abcRaw"></pre>
+
+    <!-- Playback controls (abcjs renders into this) -->
+    <div id="audio"></div>
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    // ABC NOTE UTILITIES
+    // ══════════════════════════════════════════════════════════════════════
+
+    const SHARP_NOTES = ['C', '^C', 'D', '^D', 'E', 'F', '^F', 'G', '^G', 'A', '^A', 'B'];
+    const FLAT_NOTES = ['C', '_D', 'D', '_E', 'E', 'F', '_G', 'G', '_A', 'A', '_B', 'B'];
+
+    // Key signature name map (sharps positive, flats negative)
+    const KEY_NAMES = {
+      [-6]: 'Gb', [-5]: 'Db', [-4]: 'Ab', [-3]: 'Eb', [-2]: 'Bb', [-1]: 'F',
+      0: 'C', 1: 'G', 2: 'D', 3: 'A', 4: 'E', 5: 'B', 6: 'F#',
+    };
+
+    // Pitch classes that are in each key signature
+    function getKeyPitchSet(keySig) {
+      const sharpOrder = [6, 0, 7, 2, 9, 4, 11]; // F C G D A E B → MIDI PC
+      const flatOrder = [11, 4, 9, 2, 7, 0, 6];  // B E A D G C F → MIDI PC
+      const set = new Set();
+      if (keySig > 0) {
+        for (let i = 0; i < Math.min(keySig, 7); i++) set.add(sharpOrder[i]);
+      } else if (keySig < 0) {
+        for (let i = 0; i < Math.min(-keySig, 7); i++) set.add(flatOrder[i]);
+      }
+      return set;
+    }
+
+    const NATURAL_PCS = new Set([0, 2, 4, 5, 7, 9, 11]); // C D E F G A B
+
+    function midiToABCPitch(midiPitch, keySig) {
+      const pc = midiPitch % 12;
+      const octave = Math.floor(midiPitch / 12) - 1;
+
+      // Determine if we need an accidental and which one
+      const keyPCs = getKeyPitchSet(keySig);
+      let acc = '';
+      if (keyPCs.has(pc)) {
+        // This pitch class is sharpened/flattened by key sig — no explicit accidental
+      } else if (!NATURAL_PCS.has(pc)) {
+        // Not in key sig and not natural — needs accidental
+        // Default to sharp for readability
+        acc = '^';
+      }
+
+      // Build ABC note (after the accidental marker)
+      const baseNote = SHARP_NOTES[pc];
+      const letter = baseNote[baseNote.length - 1]; // just the letter
+
+      // Handle octave markers
+      if (octave <= 3) {
+        const commas = 4 - octave;
+        return acc + letter + ','.repeat(commas);
+      } else if (octave === 4) {
+        return acc + letter;
+      } else if (octave === 5) {
+        return acc + letter.toLowerCase();
+      } else {
+        const apos = octave - 5;
+        return acc + letter.toLowerCase() + "'".repeat(apos);
+      }
+    }
+
+    function rest(beats16) {
+      return 'z' + (beats16 > 1 ? beats16 : '');
+    }
+
+    function chordABC(pitches, beats16, keySig) {
+      if (pitches.length === 0) return rest(beats16);
+      if (pitches.length === 1) {
+        const n = midiToABCPitch(pitches[0], keySig);
+        return n + (beats16 > 1 ? beats16 : '');
+      }
+      const notes = pitches.map(p => midiToABCPitch(p, keySig)).join('');
+      return '[' + notes + ']' + (beats16 > 1 ? beats16 : '');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ABC GENERATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    function generateABC(data) {
+      const { notes, tempo, timeSignature, keySignature } = data;
+      if (!notes || notes.length === 0) return null;
+
+      const beatsPerMeasure = timeSignature[0] || 4;
+      const beatUnit = timeSignature[1] || 4;
+      const keySig = keySignature || 0;
+      const secPerBeat = 60 / (tempo || 120);
+      const PPQ = 4; // pulses per quarter note (= 16th note grid)
+      const gridSec = secPerBeat / PPQ;
+
+      // Quantize note events to the grid
+      const gridNotes = [];
+      for (const n of notes) {
+        const startGrid = Math.round(n.startTime / gridSec);
+        let endGrid = Math.round((n.startTime + n.duration) / gridSec);
+        if (endGrid <= startGrid) endGrid = startGrid + 1; // minimum 1 grid
+        gridNotes.push({ pitch: n.pitch, startGrid, endGrid });
+      }
+
+      if (gridNotes.length === 0) return null;
+
+      // Find total grid duration
+      const maxEnd = Math.max(...gridNotes.map(n => n.endGrid));
+      const totalGrids = maxEnd + 1;
+
+      // Build the active pitch set at each grid position
+      // Optimization: track changes rather than recomputing every grid
+      // For simplicity with moderate note counts, recompute is fine
+      const events = []; // { startGrid, pitches }
+      let prevPitches = new Set();
+
+      for (let g = 0; g < totalGrids; g++) {
+        const active = new Set();
+        for (const n of gridNotes) {
+          if (n.startGrid <= g && n.endGrid > g) active.add(n.pitch);
+        }
+
+        // Check if pitch set changed from previous
+        if (g === 0 || !setsEqual(active, prevPitches)) {
+          events.push({ startGrid: g, pitches: [...active].sort((a, b) => a - b) });
+        }
+        prevPitches = active;
+      }
+
+      // Extend each event's duration to the start of the next event
+      for (let i = 0; i < events.length; i++) {
+        const nextStart = i < events.length - 1 ? events[i + 1].startGrid : totalGrids;
+        events[i].durationGrid = nextStart - events[i].startGrid;
+      }
+
+      // Grids per measure
+      const gridsPerMeasure = beatsPerMeasure * PPQ;
+
+      // Split events at measure boundaries (for ties)
+      const measureEvents = []; // array of arrays, one per measure
+      let currentMeasure = [];
+      let currentMeasureEnd = gridsPerMeasure;
+
+      for (const ev of events) {
+        let remaining = ev.durationGrid;
+        let offset = ev.startGrid;
+
+        while (remaining > 0) {
+          const inCurrent = Math.min(remaining, currentMeasureEnd - offset);
+          if (inCurrent > 0) {
+            currentMeasure.push({
+              pitches: ev.pitches,
+              durationGrid: inCurrent,
+              startGrid: offset,
+            });
+          }
+          remaining -= inCurrent;
+          offset += inCurrent;
+
+          if (offset >= currentMeasureEnd) {
+            // Move to next measure
+            if (currentMeasure.length > 0) {
+              measureEvents.push(currentMeasure);
+            }
+            currentMeasure = [];
+            currentMeasureEnd += gridsPerMeasure;
+          }
+        }
+      }
+
+      // Push last measure if non-empty
+      if (currentMeasure.length > 0) {
+        measureEvents.push(currentMeasure);
+      }
+
+      if (measureEvents.length === 0) return null;
+
+      // Generate ABC string per measure
+      const keyName = KEY_NAMES[keySig] || 'C';
+
+      // Use last measure flag to avoid extra rests
+      const abcMeasures = measureEvents.map((meas, mi) => {
+        const isLast = mi === measureEvents.length - 1;
+        let barLine = isLast ? '|]' : ' |';
+        let abc = '';
+
+        for (const ev of meas) {
+          if (abc.length > 0) abc += ' ';
+
+          if (ev.pitches.length === 0) {
+            abc += rest(ev.durationGrid);
+          } else {
+            abc += chordABC(ev.pitches, ev.durationGrid, keySig);
+          }
+        }
+
+        // Fill remaining grids in the measure with rests
+        const totalGrids = meas.reduce((s, e) => s + e.durationGrid, 0);
+        const fillGrids = gridsPerMeasure - totalGrids;
+        if (fillGrids > 0 && !isLast) {
+          if (abc.length > 0) abc += ' ';
+          abc += rest(fillGrids);
+        }
+
+        return abc + barLine;
+      });
+
+      const abcString = [
+        'X:1',
+        'M:' + beatsPerMeasure + '/' + beatUnit,
+        'L:1/16',
+        'K:' + keyName,
+        '',
+        abcMeasures.join('\n'),
+      ].join('\n');
+
+      return abcString;
+    }
+
+    function setsEqual(a, b) {
+      if (a.size !== b.size) return false;
+      for (const v of a) if (!b.has(v)) return false;
+      return true;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // UI
+    // ══════════════════════════════════════════════════════════════════════
+
+    const $ = id => document.getElementById(id);
+    const dropZone = $('dropZone');
+    const fileInput = $('fileInput');
+    const fileName = $('fileName');
+    const paper = $('paper');
+    const statusEl = $('status');
+    const infoBar = $('infoBar');
+    const abcRaw = $('abcRaw');
+    const abcToggle = $('abcToggle');
+    const audioEl = $('audio');
+
+    let currentData = null;
+    let currentABC = null;
+
+    function setStatus(msg, type) {
+      statusEl.textContent = msg;
+      statusEl.className = type || '';
+    }
+
+    function showLoading(show) {
+      if (show) {
+        paper.innerHTML = '<div class="loading"><div class="spinner"></div>Generating sheet music...</div>';
+      }
+    }
+
+    // Drop zone click
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('has-data');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      if (!currentData) dropZone.classList.remove('has-data');
+    });
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) loadFile(f);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) loadFile(fileInput.files[0]);
+    });
+
+    function loadFile(file) {
+      if (!file.name.endsWith('.json')) {
+        setStatus('Please select a .json file from transcribe.py', 'error');
+        return;
+      }
+      fileName.textContent = file.name;
+      dropZone.classList.add('has-data');
+      setStatus('Loading...');
+      showLoading(true);
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target.result);
+          processData(data);
+        } catch (err) {
+          setStatus('Failed to parse JSON: ' + err.message, 'error');
+          showLoading(false);
+          paper.innerHTML = `<div class="empty-state">
+            <div class="icon">&#9888;</div>
+            <h2>Parse error</h2>
+            <p>${err.message}</p>
+          </div>`;
+        }
+      };
+      reader.onerror = () => {
+        setStatus('Failed to read file', 'error');
+        showLoading(false);
+      };
+      reader.readAsText(file);
+    }
+
+    function processData(data) {
+      currentData = data;
+      const notes = data.notes || [];
+
+      if (!notes.length) {
+        setStatus('No notes in this file (transcription found nothing)', 'error');
+        showLoading(false);
+        paper.innerHTML = `<div class="empty-state">
+          <div class="icon">&#9835;</div>
+          <h2>No notes detected</h2>
+          <p>The transcription found no notes in this audio file.</p>
+        </div>`;
+        infoBar.style.display = 'none';
+        abcToggle.style.display = 'none';
+        audioEl.innerHTML = '';
+        return;
+      }
+
+      // Update info bar
+      const keyName = KEY_NAMES[(data.keySignature || 0)] || 'C';
+      $('infoNotes').textContent = notes.length;
+      $('infoTempo').textContent = data.tempo || '?';
+      $('infoDuration').textContent = (data.duration || 0).toFixed(1);
+      $('infoKey').textContent = keyName;
+      $('infoTime').textContent = (data.timeSignature || [4, 4]).join('/');
+      infoBar.style.display = 'flex';
+
+      setStatus('Generating ABC notation...');
+      showLoading(true);
+
+      // Generate ABC in a microtask to let the UI update
+      setTimeout(() => {
+        try {
+          const abc = generateABC(data);
+          if (!abc) {
+            setStatus('Could not generate notation from this data', 'error');
+            showLoading(false);
+            return;
+          }
+
+          currentABC = abc;
+          abcRaw.textContent = abc;
+          abcToggle.style.display = 'inline-block';
+          abcToggle.innerHTML = '&#9660; Hide raw ABC';
+
+          setStatus('Rendering sheet music...');
+          renderABC(abc, data);
+        } catch (err) {
+          setStatus('Generation error: ' + err.message, 'error');
+          showLoading(false);
+          console.error(err);
+        }
+      }, 50);
+    }
+
+    function renderABC(abc, data) {
+      // Clear previous content
+      paper.innerHTML = '';
+      audioEl.innerHTML = '';
+
+      try {
+        const visualObjs = ABCJS.renderAbc('paper', abc, {
+          responsive: 'resize',
+          add_classes: true,
+          paddingtop: 10,
+          paddingbottom: 10,
+          staffwidth: 900,
+        });
+
+        if (!visualObjs || visualObjs.length === 0) {
+          paper.innerHTML = '<div class="empty-state"><h2>Rendering failed</h2><p>abcjs could not render this ABC</p></div>';
+          setStatus('Rendering failed', 'error');
+          return;
+        }
+
+        // Get measure count from the rendered output
+        const measureCount = visualObjs[0].lines ?
+          visualObjs[0].lines.reduce((s, l) => s + (l.staff ? l.staff.length : 0), 0) :
+          '?';
+        $('infoMeasures').textContent = measureCount;
+
+        // Set up playback
+        const synthControl = new ABCJS.synth.SynthController();
+        synthControl.load('#audio', visualObjs[0], {
+          displayLoop: true,
+          displayRestart: true,
+          displayPlay: true,
+          displayProgress: true,
+          displayWarp: true,
+        });
+
+        setStatus('Ready — ' + data.notes.length + ' notes, ' + measureCount + ' measures', 'ok');
+      } catch (err) {
+        paper.innerHTML = `<div class="empty-state">
+          <div class="icon">&#9888;</div>
+          <h2>Render error</h2>
+          <p>${err.message}</p>
+        </div>`;
+        setStatus('Render error: ' + err.message, 'error');
+        console.error(err);
+      }
+
+      showLoading(false);
+    }
+
+    // ABC toggle
+    abcToggle.addEventListener('click', () => {
+      if (abcRaw.style.display === 'block') {
+        abcRaw.style.display = 'none';
+        abcToggle.innerHTML = '&#9660; Show raw ABC';
+      } else {
+        abcRaw.style.display = 'block';
+        abcToggle.innerHTML = '&#9650; Hide raw ABC';
+      }
+    });
+
+    setStatus('Load a notes.json file to generate sheet music');
+  </script>
+</body>
+</html>
