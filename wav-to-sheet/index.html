@@ -8,13 +8,10 @@
 </head>
 <body>
   <div class="app">
-    <div class="top-bar">
-      <h1>WAV → Sheet Music</h1>
-      <input type="file" id="fileInput" accept=".json" hidden>
-      <div class="hint">Drop a notes.json &middot; <a id="clickHint">choose file</a></div>
-    </div>
+    <input type="file" id="fileInput" accept=".json" hidden>
 
-    <div class="info-bar" id="infoBar" style="display:none">
+    <div class="info-bar" id="infoBar">
+      <a id="clickHint">choose file</a>
       <span><span class="label">Notes:</span> <span class="val" id="infoNotes">0</span></span>
       <span><span class="label">Tempo:</span> <span class="val" id="infoTempo">0</span> BPM</span>
       <span><span class="label">Duration:</span> <span class="val" id="infoDuration">0</span>s</span>
@@ -23,14 +20,9 @@
       <span><span class="label">Measures:</span> <span class="val" id="infoMeasures">0</span></span>
     </div>
 
-    <div id="status"></div>
-
     <div class="sheet-area">
       <div id="paper"></div>
     </div>
-
-    <div id="abcRaw"></div>
-    <span class="abc-toggle" id="abcToggle" style="display:none">&#9660; Show raw ABC</span>
 
     <div class="bottom-bar" id="bottomBar">
       <button id="playBtn">&#9654; Play</button>

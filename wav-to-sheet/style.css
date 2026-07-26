@@ -7,39 +7,22 @@ body {
 }
 .app { min-height: 100vh; display: flex; flex-direction: column; }
 
-/* Top bar */
-.top-bar {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.9rem 1.5rem;
-  border-bottom: 1px solid #1e1e28;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-.top-bar h1 {
-  font-size: 0.95rem;
-  font-weight: 400;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+#clickHint {
   color: #6b6b78;
-}
-.top-bar .hint {
-  font-size: 0.75rem;
-  color: #3a3a48;
-  margin-left: auto;
-}
-.top-bar .hint a {
-  color: #3a3a48;
-  text-decoration: underline;
   cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid #2a2a38;
+  border-radius: 6px;
+  transition: all 0.15s;
 }
-.top-bar .hint a:hover { color: #6b6b78; }
+#clickHint:hover { border-color: #6b6b78; color: #d4d4dc; }
 
 /* Info bar */
 .info-bar {
   display: flex;
-  gap: 1.5rem;
+  align-items: center;
+  gap: 1rem;
   padding: 0.6rem 1.5rem;
   font-size: 0.78rem;
   color: #6b6b78;
@@ -49,17 +32,6 @@ body {
 }
 .info-bar .label { color: #3a3a48; }
 .info-bar .val { color: #d4d4dc; font-weight: 500; font-variant-numeric: tabular-nums; }
-
-/* Status */
-#status {
-  padding: 0.4rem 1.5rem;
-  font-size: 0.75rem;
-  color: #3a3a48;
-  flex-shrink: 0;
-  min-height: 0.5rem;
-}
-#status.error { color: #f87171; }
-#status.ok { color: #4ade80; }
 
 /* Sheet music area */
 .sheet-area {
@@ -110,7 +82,7 @@ body {
 
 /* Bottom playback bar */
 .bottom-bar {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.7rem 1.5rem;
@@ -118,7 +90,6 @@ body {
   flex-shrink: 0;
   flex-wrap: wrap;
 }
-.bottom-bar.visible { display: flex; }
 .bottom-bar button {
   background: #1e1e28;
   border: none;
@@ -146,23 +117,3 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* ABC raw toggle */
-.abc-toggle {
-  font-size: 0.7rem;
-  color: #3a3a48;
-  cursor: pointer;
-  margin-left: auto;
-}
-.abc-toggle:hover { color: #6b6b78; }
-#abcRaw {
-  display: none;
-  background: #131318;
-  padding: 0.8rem 1.5rem;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  font-size: 0.72rem;
-  color: #6b6b78;
-  white-space: pre-wrap;
-  max-height: 150px;
-  overflow: auto;
-  flex-shrink: 0;
-}

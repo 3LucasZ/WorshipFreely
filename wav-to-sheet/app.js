@@ -161,19 +161,6 @@ function setsEqual(a, b) {
 const $ = id => document.getElementById(id);
 const paper = $('paper');
 const fileInput = $('fileInput');
-const statusEl = $('status');
-const infoBar = $('infoBar');
-const abcRaw = $('abcRaw');
-const abcToggle = $('abcToggle');
-const bottomBar = $('bottomBar');
-
-let currentData = null;
-let currentABC = null;
-
-function setStatus(msg, type) {
-  statusEl.textContent = msg;
-  statusEl.className = type || '';
-}
 
 function initEmptyState() {
   paper.innerHTML =
@@ -196,7 +183,6 @@ fileInput.addEventListener('change', () => {
 });
 
 function loadJSON(file) {
-  setStatus('Loading ' + file.name + '...');
   paper.innerHTML =
     '<div class="loading"><div class="spinner"></div><span>Processing notes...</span></div>';
 
@@ -205,27 +191,18 @@ function loadJSON(file) {
     try {
       processData(JSON.parse(e.target.result));
     } catch (err) {
-      setStatus('Parse error: ' + err.message, 'error');
       initEmptyState();
     }
   };
-  reader.onerror = () => {
-    setStatus('Failed to read file', 'error');
-    initEmptyState();
-  };
+  reader.onerror = () => initEmptyState();
   reader.readAsText(file);
 }
 
 function processData(data) {
-  currentData = data;
   const notes = data.notes || [];
 
   if (!notes.length) {
-    setStatus('No notes in this file', 'error');
     paper.innerHTML = '<div class="empty-state"><h2>No notes detected</h2><p>The transcription found nothing.</p></div>';
-    infoBar.style.display = 'none';
-    abcToggle.style.display = 'none';
-    bottomBar.classList.remove('visible');
     return;
   }
 
@@ -235,24 +212,14 @@ function processData(data) {
   $('infoDuration').textContent = (data.duration || 0).toFixed(1);
   $('infoKey').textContent = keyName;
   $('infoTime').textContent = (data.timeSignature || [4, 4]).join('/');
-  infoBar.style.display = 'flex';
-
-  setStatus('Generating notation...');
 
   setTimeout(() => {
     try {
       const abc = generateABC(data);
       if (!abc) throw new Error('ABC generation returned null');
 
-      currentABC = abc;
-      abcRaw.textContent = abc;
-      abcToggle.style.display = 'inline-block';
-      abcToggle.innerHTML = '&#9660; Show raw ABC';
-
-      setStatus('Rendering...');
       renderABC(abc, data);
     } catch (err) {
-      setStatus('Error: ' + err.message, 'error');
       paper.innerHTML = '<div class="empty-state"><h2>Generation failed</h2><p>' + err.message + '</p></div>';
     }
   }, 30);
@@ -264,7 +231,6 @@ function processData(data) {
 
 function renderABC(abc, data) {
   paper.innerHTML = '';
-  bottomBar.classList.remove('visible');
 
   try {
     if (!abc.includes('X:1')) throw new Error('ABC missing header');
@@ -279,11 +245,9 @@ function renderABC(abc, data) {
     $('infoMeasures').textContent = barCount;
 
     setupPlayback(data);
-    setStatus('Ready — ' + data.notes.length + ' notes, ' + barCount + ' measures', 'ok');
   } catch (err) {
     console.error('Render error:', err);
     paper.innerHTML = '<div class="empty-state"><h2>Render failed</h2><p>' + err.message + '</p></div>';
-    setStatus('Render error', 'error');
   }
 }
 
@@ -314,7 +278,6 @@ function setupPlayback(data) {
 
     totalDur = data.duration || Math.max(...playEvents.map(e => e.t + e.dur));
 
-    bottomBar.classList.add('visible');
     $('playBtn').textContent = '▶ Play';
     $('playBtn').disabled = false;
     $('stopBtn').disabled = true;
@@ -406,17 +369,6 @@ function fmtTime(s) {
   const sec = Math.floor(s % 60);
   return m + ':' + (sec < 10 ? '0' : '') + sec;
 }
-
-// ABC raw toggle
-abcToggle.addEventListener('click', () => {
-  if (abcRaw.style.display === 'block') {
-    abcRaw.style.display = 'none';
-    abcToggle.innerHTML = '&#9660; Show raw ABC';
-  } else {
-    abcRaw.style.display = 'block';
-    abcToggle.innerHTML = '&#9650; Hide raw ABC';
-  }
-});
 
 // ════════════════════════════════════════════════════════════════════════
 // BOOT
