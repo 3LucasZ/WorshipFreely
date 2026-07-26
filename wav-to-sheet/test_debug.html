@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>ABC Debug</title></head>
+<body>
+  <div id="paper" style="background:#fff;width:800px;min-height:200px;margin:20px;"></div>
+  <div id="info" style="font-family:mono;font-size:13px;padding:10px;"></div>
+  <div id="details" style="font-family:mono;font-size:11px;padding:10px;white-space:pre;"></div>
+  <script src="https://cdn.jsdelivr.net/npm/abcjs@6.4.4/dist/abcjs-basic-min.js"></script>
+  <script>
+    // Test the EXACT abc string from the user's output
+    const abc = `X:1
+M:4/4
+L:1/16
+Q:1/4=88
+K:A
+
+z5 A5 z6 |
+z3 [A,,E,B,E]2 [A,,B,CE]2 [A,,E,B,] B, [E,A,B,CA]2 [E,B,CAe]2 [E,B,Ce] [E,A,B,CA] [E,B,CA] |
+[E,B,C] [A,,E,A,B,C] [A,,E,A,A] [A,,E,CA] [A,,A,CA] [A,,E,A,C] [A,,E,A,A] [E,A,A] z [A,,E,B,EB] [A,,B,CE] [A,,B,E] [A,,B,G] [E,B,] [E,C] [E,B,C] |
+[E,B,C] [E,Cc]2 [Cc] [E,CB] [E,C] [E,Cc]3 [Cc]2 C2 z [A,,D,E,B,E] [A,,D,B,C] |
+[A,,D,B,]2 [D,F,B,F] [F,B,EA] [F,A,B,EA] [F,A,B,] [F,A,Ee] [F,A,E] [A,,F,A,E] [F,A,]4 A, [F,F]2 |
+[F,F]2 F, [A,,A,CE] [A,,D,E] B, [A,B,] [F,A,B,F]2 [F,A,B,EFA] [A,,F,A,B,E] [A,,F,A,A] [F,A,A]2 [F,A,] [F,A,A] |
+[F,A,A]2 [D,F,A,A] [F,A] [F,A,A] [F,A,] A, z2 [C,B,E] [C,B,] [F,,,C,B,] [F,,,C,F,B,] [F,,,F,B,] [F,,,F,,B,CA] [F,,,F,,B,A] |
+[F,,,F,,B,] [F,,,F,,e] [F,,B,] z [F,,B,e] [F,,B,] F,, [F,,B,] [F,,,F,,B,] [F,,,F,,e] [F,,e] [F,,C,]2 C, [C,B,]2 |
+[C,B,]2 [C,F,B,] [C,F,B,C] [C,F,B,] [F,,C,F,B,] [F,,C,F,B,c] [F,,C,F,A,B,c] [F,,C,F,B,Bc]3 [F,,,F,,F,B,] [F,,,F,,F,B] B [F,,F,]2 |
+F, z2 [D,B,E] [A,,D,B,E] [A,,B,CE] [B,CE] [F,B,]2 [A,,F,A,B,E]2 [F,A,B,Ee]2 [F,A,B,e]2 [F,A,Ee] |
+[F,A,B,E] [A,B,E] [B,E] F5 z [A,,D,CE] [A,,D,B,CE] [A,,D,A,B,C] [A,,F,A,B,C] [F,A,B,] [A,,F,A,B,A] [A,,F,A,B,EA] |
+[F,A,] [F,A,A]2 [F,A,] A,2 [D,A,] z7 [A,,E,] [A,,E,A,] |
+[A,,E,A,]3 z z12|]`;
+
+    const lines = abc.split('\n');
+    const header = lines.slice(0, 6).join('\n');
+    let info = document.getElementById('info');
+    let details = document.getElementById('details');
+
+    // Test each measure as a complete tune (|] at end)
+    let allOk = true;
+    for (let i = 6; i < lines.length; i++) {
+      const testContent = header + '\n' + lines[i].replace(/ \|$/, ' |]');
+      const el = document.createElement('div');
+      el.style.cssText = 'position:absolute;left:-9999px;width:600px;';
+      document.body.appendChild(el);
+      try {
+        ABCJS.renderAbc(el, testContent, { staffwidth: 600 });
+        const paths = el.querySelector('svg') ? el.querySelector('svg').querySelectorAll('path').length : 0;
+        if (paths === 0) {
+          info.textContent += 'FAIL M' + (i-6) + ' ';
+          allOk = false;
+        }
+      } catch(e) {
+        info.textContent += 'ERR M' + (i-6) + ' ';
+      }
+      document.body.removeChild(el);
+    }
+    info.textContent = 'Individual measures: ' + (allOk ? 'ALL OK' : 'SOME FAILED') + '\n';
+
+    // Now test incremental: add measures one at a time
+    let goodUpTo = -1;
+    for (let i = 6; i < lines.length; i++) {
+      const testAbc = header + '\n' + lines.slice(6, i + 1).join('\n').replace(/ \|$/, ' |]');
+      const el = document.createElement('div');
+      el.style.cssText = 'position:absolute;left:-9999px;width:600px;';
+      document.body.appendChild(el);
+      try {
+        ABCJS.renderAbc(el, testAbc, { staffwidth: 600 });
+        const paths = el.querySelector('svg') ? el.querySelector('svg').querySelectorAll('path').length : 0;
+        if (paths === 0) {
+          info.textContent += 'Broke at M' + (i-6) + ' (1st col) ';
+          details.textContent = 'Breaking ABC:\n' + testAbc;
+          goodUpTo = i - 1;
+          break;
+        }
+      } catch(e) {
+        info.textContent += 'Error at M' + (i-6) + ': ' + e.message;
+        goodUpTo = i - 1;
+        break;
+      }
+      document.body.removeChild(el);
+    }
+
+    if (goodUpTo >= 5) {
+      info.textContent += '\nAll 13 measures combined failed! Trying different L:';
+
+      // Try with L:1/8
+      const abc8 = abc.replace('L:1/16', 'L:1/8').replace(/([A-Za-z,']+)(\d+)/g, (m, n, len) => n + Math.round(parseInt(len)/2)).replace(/z(\d+)/g, (m, len) => 'z' + Math.round(parseInt(len)/2));
+      const el = document.createElement('div');
+      el.style.cssText = 'position:absolute;left:-9999px;width:600px;';
+      document.body.appendChild(el);
+      ABCJS.renderAbc(el, abc8, { staffwidth: 600 });
+      const paths8 = el.querySelector('svg') ? el.querySelector('svg').querySelectorAll('path').length : 0;
+      info.textContent += '\nL:1/8 paths: ' + paths8;
+      document.body.removeChild(el);
+
+      // Try L:1/4
+      const abc4 = abc.replace('L:1/16', 'L:1/4').replace(/([A-Za-z,']+)(\d+)/g, (m, n, len) => n + Math.round(parseInt(len)/4)).replace(/z(\d+)/g, (m, len) => 'z' + Math.round(parseInt(len)/4));
+      const el2 = document.createElement('div');
+      el2.style.cssText = 'position:absolute;left:-9999px;width:600px;';
+      document.body.appendChild(el2);
+      ABCJS.renderAbc(el2, abc4, { staffwidth: 600 });
+      const paths4 = el2.querySelector('svg') ? el2.querySelector('svg').querySelectorAll('path').length : 0;
+      info.textContent += '\nL:1/4 paths: ' + paths4;
+      document.body.removeChild(el2);
+
+      // Try L:1/1
+      const abc1 = abc.replace('L:1/16', 'L:1/1').replace(/([A-Za-z,']+)(\d+)/g, (m, n, len) => n + Math.round(parseInt(len)/16)).replace(/z(\d+)/g, (m, len) => 'z' + Math.round(parseInt(len)/16));
+      const el3 = document.createElement('div');
+      el3.style.cssText = 'position:absolute;left:-9999px;width:600px;';
+      document.body.appendChild(el3);
+      ABCJS.renderAbc(el3, abc1, { staffwidth: 600 });
+      const paths1 = el3.querySelector('svg') ? el3.querySelector('svg').querySelectorAll('path').length : 0;
+      info.textContent += '\nL:1/1 paths: ' + paths1;
+      document.body.removeChild(el3);
+
+      // Try with no L at all and remove all numbers
+      const noLen = abc.replace('L:1/16\n', '').replace(/Q:1\/4=\d+\n/, '').replace(/\d+/g, '').replace(/\n\n+/, '\n');
+      const el4 = document.createElement('div');
+      el4.style.cssText = 'position:absolute;left:-9999px;width:600px;';
+      document.body.appendChild(el4);
+      ABCJS.renderAbc(el4, noLen, { staffwidth: 600 });
+      const pathsNo = el4.querySelector('svg') ? el4.querySelector('svg').querySelectorAll('path').length : 0;
+      info.textContent += '\nNo lengths paths: ' + pathsNo;
+      document.body.removeChild(el4);
+    }
+
+    // Now show the actual rendered output for measures 0-3
+    document.getElementById('paper').innerHTML = '';
+    const partial = lines.slice(0, 10).join('\n').replace(/ \|$/, ' |]');
+    ABCJS.renderAbc('paper', partial, { staffwidth: 750 });
+    const svgRef = document.querySelector('#paper svg');
+    if (svgRef) {
+      info.textContent += '\n\nRendered M0-M3: ' + svgRef.querySelectorAll('path').length + ' paths';
+    }
+  </script>
+</body>
+</html>

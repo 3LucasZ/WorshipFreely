@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>ABC Test</title></head>
+<body>
+  <h2>ABC Rendering Test</h2>
+  <div id="paper" style="background:#fff;width:800px;min-height:200px;margin:20px;"></div>
+  <div id="info" style="font-family:mono;font-size:14px;padding:10px;"></div>
+  <script src="https://cdn.jsdelivr.net/npm/abcjs@6.4.4/dist/abcjs-basic-min.js"></script>
+  <script>
+    // Test ABC WITHOUT empty line between header and body
+    const abc = 'X:1\nM:4/4\nL:1/16\nQ:1/4=88\nK:A\nz5 A5 z6 |\nz3 [A,,E,B,E]2 [A,,B,CE]2 [A,,E,B,] B, [E,A,B,CA]2 [E,B,CAe]2 [E,B,Ce] [E,A,B,CA] [E,B,CA] |]';
+    try {
+      const result = ABCJS.renderAbc('paper', abc, {staffwidth: 750 });
+      const svg = document.querySelector('#paper svg');
+      if (svg) {
+        document.getElementById('info').textContent = 
+          'SVG: ' + svg.getBoundingClientRect().width + 'x' + svg.getBoundingClientRect().height +
+          ' | paths: ' + svg.querySelectorAll('path').length +
+          ' | text: ' + svg.querySelectorAll('text').length;
+      } else {
+        document.getElementById('info').textContent = 'NO SVG';
+      }
+    } catch(e) {
+      document.getElementById('info').textContent = 'Error: ' + e.message;
+    }
+  </script>
+</body>
+</html>

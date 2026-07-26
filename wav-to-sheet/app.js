@@ -139,12 +139,12 @@ function generateABC(data) {
       if (s.length) s += ' ';
       s += restABC(fill);
     }
-    return s + (isLast ? '|]' : ' |');
+    return s + (isLast ? ' |]' : ' |');
   });
 
   return [
     'X:1', 'M:' + beatsPerMeasure + '/' + beatUnit, 'L:1/16',
-    'Q:1/4=' + bpm, 'K:' + keyName, '', abcMeasures.join('\n'),
+    'Q:1/4=' + bpm, 'K:' + keyName, abcMeasures.join('\n'),
   ].join('\n');
 }
 
@@ -233,17 +233,12 @@ function renderABC(abc, data) {
   paper.innerHTML = '';
 
   try {
-    if (!abc.includes('X:1')) throw new Error('ABC missing header');
-
     ABCJS.renderAbc(paper, abc, {
-      add_classes: true,
       staffwidth: Math.min(960, window.innerWidth - 80),
       paddingleft: 15, paddingright: 15, paddingtop: 20, paddingbottom: 20,
     });
 
-    const barCount = (abc.match(/ \|/g) || []).length;
-    $('infoMeasures').textContent = barCount;
-
+    $('infoMeasures').textContent = (abc.match(/ \|/g) || []).length;
     setupPlayback(data);
   } catch (err) {
     console.error('Render error:', err);
