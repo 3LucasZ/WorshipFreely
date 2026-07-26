@@ -89,17 +89,26 @@ function generateABC(data) {
 
   const totalGrids = Math.max(...gNotes.map(n => n.eg)) + 1;
 
+  // Events tracking treble (>=60) and bass (<60) separately
   const events = [];
-  let prev = new Set();
+  let prevT = new Set(), prevB = new Set();
   for (let g = 0; g < totalGrids; g++) {
-    const active = new Set();
+    const treble = new Set(), bass = new Set();
     for (const n of gNotes) {
-      if (n.sg <= g && n.eg > g) active.add(n.p);
+      if (n.sg <= g && n.eg > g) {
+        if (n.p >= 60) treble.add(n.p);
+        else bass.add(n.p);
+      }
     }
-    if (g === 0 || !setsEqual(active, prev)) {
-      events.push({ g, pitches: [...active].sort((a, b) => a - b) });
+    const tArr = [...treble].sort((a, b) => a - b);
+    const bArr = [...bass].sort((a, b) => a - b);
+    const tKey = tArr.join(',');
+    const bKey = bArr.join(',');
+    if (g === 0 || tKey !== [...prevT].sort((a,b)=>a-b).join(',') || bKey !== [...prevB].sort((a,b)=>a-b).join(',')) {
+      events.push({ g, treble: tArr, bass: bArr });
     }
-    prev = active;
+    prevT = treble;
+    prevB = bass;
   }
 
   for (let i = 0; i < events.length; i++) {
@@ -107,51 +116,55 @@ function generateABC(data) {
   }
 
   const gpm = beatsPerMeasure * 4;
-  const measures = [];
-  let cur = [];
-  let curEnd = gpm;
 
-  for (const ev of events) {
-    let rem = ev.dur, off = ev.g;
-    while (rem > 0) {
-      const inCur = Math.min(rem, curEnd - off);
-      if (inCur > 0) cur.push({ p: ev.pitches, d: inCur });
-      rem -= inCur; off += inCur;
-      if (off >= curEnd) {
-        if (cur.length > 0) measures.push(cur);
-        cur = []; curEnd += gpm;
+  function buildVoice(getPitches) {
+    const measures = [];
+    let cur = [];
+    let curEnd = gpm;
+
+    for (const ev of events) {
+      const pitches = getPitches(ev);
+      let rem = ev.dur, off = ev.g;
+      while (rem > 0) {
+        const inCur = Math.min(rem, curEnd - off);
+        if (inCur > 0) cur.push({ p: pitches, d: inCur });
+        rem -= inCur; off += inCur;
+        if (off >= curEnd) {
+          if (cur.length > 0) measures.push(cur);
+          cur = []; curEnd += gpm;
+        }
       }
     }
+    if (cur.length > 0) measures.push(cur);
+
+    return measures.map((meas, mi) => {
+      const isLast = mi === measures.length - 1;
+      let s = '';
+      for (const ev of meas) {
+        if (s.length) s += ' ';
+        s += ev.p.length === 0 ? restABC(ev.d) : chordABC(ev.p, ev.d, keySig);
+      }
+      const fill = gpm - meas.reduce((sum, e) => sum + e.d, 0);
+      if (fill > 0) {
+        if (s.length) s += ' ';
+        s += restABC(fill);
+      }
+      return s + (isLast ? ' |]' : ' |');
+    });
   }
-  if (cur.length > 0) measures.push(cur);
-  if (measures.length === 0) return null;
+
+  const trebleMeasures = buildVoice(ev => ev.treble);
+  const bassMeasures = buildVoice(ev => ev.bass);
 
   const keyName = KEY_NAMES[keySig] || 'C';
-  const abcMeasures = measures.map((meas, mi) => {
-    const isLast = mi === measures.length - 1;
-    let s = '';
-    for (const ev of meas) {
-      if (s.length) s += ' ';
-      s += ev.p.length === 0 ? restABC(ev.d) : chordABC(ev.p, ev.d, keySig);
-    }
-    const fill = gpm - meas.reduce((sum, e) => sum + e.d, 0);
-    if (fill > 0) {
-      if (s.length) s += ' ';
-      s += restABC(fill);
-    }
-    return s + (isLast ? ' |]' : ' |');
-  });
-
   return [
     'X:1', 'M:' + beatsPerMeasure + '/' + beatUnit, 'L:1/16',
-    'Q:1/4=' + bpm, 'K:' + keyName, abcMeasures.join('\n'),
+    'Q:1/4=' + bpm,
+    'V:1', 'K:' + keyName,
+    trebleMeasures.join('\n'),
+    'V:2 clef=bass', 'K:' + keyName,
+    bassMeasures.join('\n'),
   ].join('\n');
-}
-
-function setsEqual(a, b) {
-  if (a.size !== b.size) return false;
-  for (const v of a) if (!b.has(v)) return false;
-  return true;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -238,7 +251,9 @@ function renderABC(abc, data) {
       paddingleft: 15, paddingright: 15, paddingtop: 20, paddingbottom: 20,
     });
 
-    $('infoMeasures').textContent = (abc.match(/ \|/g) || []).length;
+    const barLines = (abc.match(/ \|/g) || []).length;
+    // Divided by 2 since the bar count includes both treble and bass voices
+    $('infoMeasures').textContent = Math.round(barLines / 2);
     setupPlayback(data);
   } catch (err) {
     console.error('Render error:', err);
