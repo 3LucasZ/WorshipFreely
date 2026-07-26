@@ -7,7 +7,7 @@ pip install -r requirements.txt
 
 # Transcribe the piano stem
 
-python transcribe.py ../separated/htdemucs_6s/Center_Bethel/piano.wav
+python transcribe.py ../Sample/piano.wav
 
 # Outputs: piano_notes.json
 
