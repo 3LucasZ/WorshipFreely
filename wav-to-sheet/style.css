@@ -108,23 +108,6 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Drop zone */
-.drop-zone {
-  border: 2px dashed #2a2a38;
-  border-radius: 10px;
-  padding: 1.5rem 2rem;
-  text-align: center;
-  cursor: pointer;
-  margin: 1rem;
-  flex-shrink: 0;
-  transition: all 0.2s;
-}
-.drop-zone:hover { border-color: #6b6b78; }
-.drop-zone.has-data { border-color: #6d28d9; background: rgba(109,40,217,0.06); }
-.drop-zone .icon { font-size: 2rem; color: #3a3a48; margin-bottom: 0.3rem; }
-.drop-zone .title { font-size: 0.85rem; color: #6b6b78; }
-.drop-zone .fname { font-size: 0.8rem; color: #6d28d9; margin-top: 0.3rem; }
-
 /* Bottom playback bar */
 .bottom-bar {
   display: none;

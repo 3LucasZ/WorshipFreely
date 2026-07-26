@@ -160,9 +160,7 @@ function setsEqual(a, b) {
 
 const $ = id => document.getElementById(id);
 const paper = $('paper');
-const dropZone = $('dropZone');
 const fileInput = $('fileInput');
-const fileName = $('fileName');
 const statusEl = $('status');
 const infoBar = $('infoBar');
 const abcRaw = $('abcRaw');
@@ -186,10 +184,9 @@ function initEmptyState() {
 // FILE LOADING
 // ════════════════════════════════════════════════════════════════════════
 
-dropZone.addEventListener('click', () => fileInput.click());
-$('clickHint').addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
-dropZone.addEventListener('dragover', e => e.preventDefault());
-dropZone.addEventListener('drop', e => {
+$('clickHint').addEventListener('click', () => fileInput.click());
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
   e.preventDefault();
   const f = e.dataTransfer.files[0];
   if (f && f.name.endsWith('.json')) loadJSON(f);
@@ -199,9 +196,7 @@ fileInput.addEventListener('change', () => {
 });
 
 function loadJSON(file) {
-  fileName.textContent = file.name;
-  dropZone.classList.add('has-data');
-  setStatus('Loading...');
+  setStatus('Loading ' + file.name + '...');
   paper.innerHTML =
     '<div class="loading"><div class="spinner"></div><span>Processing notes...</span></div>';
 
