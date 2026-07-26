@@ -3,3 +3,4 @@ separated/.DS_Store
 .DS_Store
 /wav-to-sheet/env
 /Center_Bethel
+*.pyc
